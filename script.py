@@ -109,8 +109,10 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
+        keyboard.append([InlineKeyboardButton("ارتباط با پشتیبانی", url=f"tg://user?id={ADMIN_ID}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        # await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
+        await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
+
     else:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
