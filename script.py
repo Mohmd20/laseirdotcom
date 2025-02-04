@@ -33,7 +33,7 @@ COLUMN_LABELS = {
 }
 
 def get_db_connection():
-    return sqlite3.connect("mydatabase.db")
+    return sqlite3.connect("bot_database.db")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("بزن بریم", callback_data="start_business")]]
@@ -44,7 +44,6 @@ async def start_business_callback(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     keyboard = [[InlineKeyboardButton(table_label, callback_data=f"table_{table_key}")] for table_key, table_label in TABLE_LABELS.items()]
-    keyboard.append([InlineKeyboardButton("بازگشت", callback_data="back_to_start")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("لطفاً حوزه کسب کارتون رو انتخاب کنید:", reply_markup=reply_markup)
 
@@ -112,7 +111,7 @@ def main():
     app.add_handler(CallbackQueryHandler(table_callback, pattern="^table_"))
     app.add_handler(CallbackQueryHandler(column_callback, pattern="^column_"))
     app.add_handler(CommandHandler("support" , support))
-    print("ربات در حال اجرا است...")
+    print("The Robot Is Running!!")
     app.post_init = set_bot_commands
     app.run_polling()
 
