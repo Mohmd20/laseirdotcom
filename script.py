@@ -56,7 +56,7 @@ async def table_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(COLUMN_LABELS.get(col, col), callback_data=f"column_{col}")] for col in columns]
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="back_to_tables")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(f"شما {TABLE_LABELS.get(table_key, table_key)} را انتخاب کردید.\nحالا یکی از موارد زیر را انتخاب کنید:", reply_markup=reply_markup)
+    await query.edit_message_text(f"شما {TABLE_LABELS.get(table_key, table_key)} را انتخاب کردید.\n هر کدوم رو خواستی انتخاب کن تا کاتالوگش رو برات ارسال کنم", reply_markup=reply_markup)
 async def support (update:Update , context:ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("برای ارتباط با ما روی   id زیر کلیک کنید :(https://t.me/misterwebdeveloper)" , parse_mode="Markdown")
 async def set_bot_commands(application: Application):
@@ -89,7 +89,7 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_document(document=bio)
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("فایل برای شما ارسال شد.", reply_markup=reply_markup)
+        await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
     else:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
