@@ -66,6 +66,7 @@ async def set_bot_commands(application: Application):
     ]
     await application.bot.set_my_commands(commands)
 async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ADMIN_ID = 235828041
     query = update.callback_query
     await query.answer()
     column_key = query.data.split("_", 1)[1]
@@ -87,9 +88,13 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bio = BytesIO(file_data)
         bio.name = f"{column_key}.pdf"
         await query.message.reply_document(document=bio)
+        user_id = update.effective_user.id
+        admin_message = (f"کاربری با آی‌دی {user_id} از ربات فایل '{COLUMN_LABELS.get(column_key, column_key)}' "
+                         f"را از حوزه '{TABLE_LABELS.get(table_key, table_key)}' دریافت کرد.")
+        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
+        # await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
     else:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
