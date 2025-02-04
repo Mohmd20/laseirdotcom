@@ -36,9 +36,9 @@ def get_db_connection():
     return sqlite3.connect("bot_database.db")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("بزن بریم", callback_data="start_business")]]
+    keyboard = [[InlineKeyboardButton("بعدی ", callback_data="start_business")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("خوش آمدید!", reply_markup=reply_markup)
+    await update.message.reply_text("برای شروع کافیه کلیک کنید تا در خرید محصول کمکتون کنم", reply_markup=reply_markup)
 
 async def start_business_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
