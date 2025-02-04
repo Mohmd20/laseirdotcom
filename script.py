@@ -89,9 +89,25 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bio.name = f"{column_key}.pdf"
         await query.message.reply_document(document=bio)
         user_id = update.effective_user.id
-        admin_message = (f"کاربری با آی‌دی {user_id} از ربات فایل '{COLUMN_LABELS.get(column_key, column_key)}' "
-                         f"را از حوزه '{TABLE_LABELS.get(table_key, table_key)}' دریافت کرد.")
-        await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
+
+# متن پیام برای ادمین (می‌توانید همچنان آی‌دی را به صورت متن بگنجانید)
+        admin_message = (
+        f"کاربری از ربات فایل '{COLUMN_LABELS.get(column_key, column_key)}' "
+        f"را از حوزه '{TABLE_LABELS.get(table_key, table_key)}' دریافت کرد."
+        )
+
+# ایجاد یک دکمه اینلاین با URL مناسب
+        keyboard = [
+        [InlineKeyboardButton("چت با کاربر", url=f"tg://user?id={user_id}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message,
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         # await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
