@@ -1,10 +1,10 @@
 import sqlite3
 from io import BytesIO
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # جایگزین با توکن واقعی
-TOKEN = "..."
+TOKEN = "7980217172:AAFuQy4Gv9wYqtm42zxbRyh9zh89oWfHqMM"
 
 # تعریف دیکشنری‌های مربوط به عناوین فارسی
 TABLE_LABELS = {
@@ -58,7 +58,14 @@ async def table_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="back_to_tables")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(f"شما {TABLE_LABELS.get(table_key, table_key)} را انتخاب کردید.\nحالا یکی از موارد زیر را انتخاب کنید:", reply_markup=reply_markup)
-
+async def support (update:Update , context:ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("برای ارتباط با ما روی   id زیر کلیک کنید :(https://t.me/misterwebdeveloper)" , parse_mode="Markdown")
+async def set_bot_commands(application: Application):
+    commands = [
+        BotCommand("start" , "خانه"),
+        BotCommand("support" , "ارتباط با پشتیبانی")
+    ]
+    await application.bot.set_my_commands(commands)
 async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -104,8 +111,9 @@ def main():
     app.add_handler(CallbackQueryHandler(back_to_tables, pattern="^back_to_tables$"))
     app.add_handler(CallbackQueryHandler(table_callback, pattern="^table_"))
     app.add_handler(CallbackQueryHandler(column_callback, pattern="^column_"))
-
+    app.add_handler(CommandHandler("support" , support))
     print("ربات در حال اجرا است...")
+    app.post_init = set_bot_commands
     app.run_polling()
 
 if __name__ == '__main__':
