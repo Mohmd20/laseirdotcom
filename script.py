@@ -1,11 +1,24 @@
 import sqlite3
 from io import BytesIO
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup , BotCommand
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler, ContextTypes,
+    ConversationHandler, MessageHandler, filters
+)
 # جایگزین با توکن واقعی
 TOKEN = "7980217172:AAFuQy4Gv9wYqtm42zxbRyh9zh89oWfHqMM"
+TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
+# (در صورت نیاز) آی‌دی اصلی ادمینی که برای ارسال کاتالوگ استفاده می‌شود (مثلاً برای اطلاع‌رسانی)
+MAIN_ADMIN_ID = 123456789
+
+# تعریف سه رمز (secret passwords)
+PASSWORD_ADD = "addadmin123"           # رمز اول برای افزودن ادمین
+PASSWORD_REMOVE_SINGLE = "removeadmin456"  # رمز دوم برای حذف یک ادمین
+PASSWORD_REMOVE_ALL = "removeall789"       # رمز سوم برای حذف تمام ادمین‌ها
+
+# حالت‌های مکالمه برای افزودن ادمین
+ADD_ADMIN_NAME = 1
 # تعریف دیکشنری‌های مربوط به عناوین فارسی
 TABLE_LABELS = {
     "gold": "حکاکی رنگی طلا",
@@ -34,7 +47,18 @@ COLUMN_LABELS = {
 
 def get_db_connection():
     return sqlite3.connect("bot_database.db")
-
+def create_admins_table():
+    conn = sqlite3.connect("bot_database.db")
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE,
+            name TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("بزن بریم", callback_data="start_business")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -123,6 +147,81 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def back_to_tables(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start_business_callback(update, context)
+async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # کاربر پس از ارسال رمز PASSWORD_ADD وارد این handler می‌شود
+    await update.message.reply_text("لطفاً نام خود را وارد کنید:")
+    return ADD_ADMIN_NAME
+
+async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    admin_name = update.message.text.strip()
+    user_id = update.effective_user.id
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # استفاده از INSERT OR IGNORE تا اگر کاربر قبلاً ثبت شده باشد خطا ندهد
+    cur.execute("INSERT OR IGNORE INTO admins (user_id, name) VALUES (?, ?)", (user_id, admin_name))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(f"ادمین با نام {admin_name} اضافه شد.")
+    return ConversationHandler.END
+
+async def cancel_admin_addition(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("عملیات افزودن ادمین لغو شد.")
+    return ConversationHandler.END
+
+# --- حذف یک ادمین (رمز دوم) ---
+async def remove_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, name FROM admins")
+    admins = cur.fetchall()
+    conn.close()
+    if not admins:
+        await update.message.reply_text("ادمینی ثبت نشده است.")
+        return
+    keyboard = []
+    for admin in admins:
+        user_id, name = admin
+        keyboard.append([InlineKeyboardButton(f"{name} ({user_id})", callback_data=f"remove_admin_{user_id}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("لطفاً یک ادمین را برای حذف انتخاب کنید:", reply_markup=reply_markup)
+
+async def remove_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # مانند "remove_admin_195605236"
+    parts = data.split("_")
+    if len(parts) == 3:
+        admin_user_id = parts[2]
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM admins WHERE user_id = ?", (admin_user_id,))
+        conn.commit()
+        conn.close()
+        await query.edit_message_text("ادمین مورد نظر حذف شد.")
+
+# --- حذف تمام ادمین‌ها (رمز سوم) ---
+async def remove_all_admins_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("تایید", callback_data="confirm_remove_all"),
+         InlineKeyboardButton("لغو", callback_data="cancel_remove_all")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("آیا مطمئن هستید که می‌خواهید تمامی ادمین‌ها حذف شوند؟", reply_markup=reply_markup)
+
+async def confirm_remove_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM admins")
+    conn.commit()
+    conn.close()
+    await query.edit_message_text("تمامی ادمین‌ها حذف شدند.")
+
+async def cancel_remove_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("عملیات حذف تمامی ادمین‌ها لغو شد.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -134,6 +233,28 @@ def main():
     app.add_handler(CallbackQueryHandler(table_callback, pattern="^table_"))
     app.add_handler(CallbackQueryHandler(column_callback, pattern="^column_"))
     app.add_handler(CommandHandler("support" , support))
+
+
+ # 1. افزودن ادمین (رمز اول)
+    admin_conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Text(PASSWORD_ADD), add_admin_start)],
+        states={
+            ADD_ADMIN_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_admin_addition)]
+    )
+    app.add_handler(admin_conv_handler)
+    
+    # 2. حذف یک ادمین (رمز دوم)
+    app.add_handler(MessageHandler(filters.Text(PASSWORD_REMOVE_SINGLE), remove_admin_list))
+    app.add_handler(CallbackQueryHandler(remove_admin_callback, pattern=r"^remove_admin_\d+$"))
+    
+    # 3. حذف تمامی ادمین‌ها (رمز سوم)
+    app.add_handler(MessageHandler(filters.Text(PASSWORD_REMOVE_ALL), remove_all_admins_start))
+    app.add_handler(CallbackQueryHandler(confirm_remove_all, pattern="^confirm_remove_all$"))
+    app.add_handler(CallbackQueryHandler(cancel_remove_all, pattern="^cancel_remove_all$"))
+    
+
     print("The Robot Is Running!!")
     app.post_init = set_bot_commands
     app.run_polling()
