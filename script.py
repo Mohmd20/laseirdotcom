@@ -2,24 +2,23 @@ import sqlite3
 from io import BytesIO
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes,
-    ConversationHandler, MessageHandler, filters
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ConversationHandler, ContextTypes, filters
 )
-# جایگزین با توکن واقعی
-TOKEN = "7980217172:AAFuQy4Gv9wYqtm42zxbRyh9zh89oWfHqMM"
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
 
-# (در صورت نیاز) آی‌دی اصلی ادمینی که برای ارسال کاتالوگ استفاده می‌شود (مثلاً برای اطلاع‌رسانی)
-MAIN_ADMIN_ID = 123456789
+# =====================
+# تنظیمات اولیه و ثابت‌ها
+# =====================
+TOKEN = ""
 
-# تعریف سه رمز (secret passwords)
-PASSWORD_ADD = "addadmin123"           # رمز اول برای افزودن ادمین
-PASSWORD_REMOVE_SINGLE = "removeadmin456"  # رمز دوم برای حذف یک ادمین
-PASSWORD_REMOVE_ALL = "removeall789"       # رمز سوم برای حذف تمام ادمین‌ها
+# رمزها (برای مثال)
+PASSWORD_ADD = "123"       # رمز افزودن ادمین
+MAIN_ADMIN_PASS = "321"     # رمز عملیات ادمین اصلی
 
-# حالت‌های مکالمه برای افزودن ادمین
-ADD_ADMIN_NAME = 1
-# تعریف دیکشنری‌های مربوط به عناوین فارسی
+# حالت مکالمه برای دریافت فایل در ویرایش کاتالوگ
+STATE_WAIT_FOR_CATALOG_FILE = 1
+
+# دیکشنری‌های مربوط به کاتالوگ (ساختار قبلی)
 TABLE_LABELS = {
     "gold": "حکاکی رنگی طلا",
     "industrial": "حکاکی قطعات صنعتی",
@@ -45,8 +44,13 @@ COLUMN_LABELS = {
     "uv": "UV"
 }
 
+# =====================
+# توابع اتصال به پایگاه داده
+# =====================
 def get_db_connection():
+    # از یک پایگاه داده یکسان (مثلاً "bot_database.db") در تمام قسمت‌ها استفاده کنید
     return sqlite3.connect("bot_database.db")
+
 def create_admins_table():
     conn = sqlite3.connect("bot_database.db")
     cur = conn.cursor()
@@ -59,6 +63,12 @@ def create_admins_table():
     ''')
     conn.commit()
     conn.close()
+
+
+
+
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("بزن بریم", callback_data="start_business")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -142,22 +152,28 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("متاسفانه داده‌ای یافت نشد.", reply_markup=reply_markup)
 
+
+
 async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
 
 async def back_to_tables(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start_business_callback(update, context)
+
+
+
+# =====================
+# بخش افزودن ادمین (با رمز PASSWORD_ADD)
+# =====================
 async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # کاربر پس از ارسال رمز PASSWORD_ADD وارد این handler می‌شود
     await update.message.reply_text("لطفاً نام خود را وارد کنید:")
-    return ADD_ADMIN_NAME
+    return 1
 
 async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_name = update.message.text.strip()
     user_id = update.effective_user.id
     conn = get_db_connection()
     cur = conn.cursor()
-    # استفاده از INSERT OR IGNORE تا اگر کاربر قبلاً ثبت شده باشد خطا ندهد
     cur.execute("INSERT OR IGNORE INTO admins (user_id, name) VALUES (?, ?)", (user_id, admin_name))
     conn.commit()
     conn.close()
@@ -168,28 +184,42 @@ async def cancel_admin_addition(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("عملیات افزودن ادمین لغو شد.")
     return ConversationHandler.END
 
-# --- حذف یک ادمین (رمز دوم) ---
-async def remove_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# =====================
+# بخش ادمین اصلی (با رمز MAIN_ADMIN_PASS)
+# =====================
+# وقتی کاربر رمز MAIN_ADMIN_PASS را ارسال کند، منوی ادمین اصلی نمایش داده می‌شود
+async def main_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("حذف تکی ادمین ها", callback_data="admin_remove_single")],
+        [InlineKeyboardButton("حذف همه ادمین ها", callback_data="admin_remove_all")],
+        [InlineKeyboardButton("ویرایش کاتالوگ", callback_data="admin_edit_catalog")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("منوی ادمین اصلی:", reply_markup=reply_markup)
+
+# ----- حذف تکی ادمین -----
+async def admin_remove_single_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("SELECT user_id, name FROM admins")
     admins = cur.fetchall()
     conn.close()
     if not admins:
-        await update.message.reply_text("ادمینی ثبت نشده است.")
+        await query.edit_message_text("ادمینی ثبت نشده است.")
         return
     keyboard = []
     for admin in admins:
         user_id, name = admin
         keyboard.append([InlineKeyboardButton(f"{name} ({user_id})", callback_data=f"remove_admin_{user_id}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("لطفاً یک ادمین را برای حذف انتخاب کنید:", reply_markup=reply_markup)
+    await query.edit_message_text("لطفاً یک ادمین را برای حذف انتخاب کنید:", reply_markup=reply_markup)
 
 async def remove_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data = query.data  # مانند "remove_admin_195605236"
-    parts = data.split("_")
+    parts = query.data.split("_")  # قالب: remove_admin_<user_id>
     if len(parts) == 3:
         admin_user_id = parts[2]
         conn = get_db_connection()
@@ -199,16 +229,18 @@ async def remove_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
         conn.close()
         await query.edit_message_text("ادمین مورد نظر حذف شد.")
 
-# --- حذف تمام ادمین‌ها (رمز سوم) ---
-async def remove_all_admins_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ----- حذف همه ادمین ها -----
+async def admin_remove_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
     keyboard = [
-        [InlineKeyboardButton("تایید", callback_data="confirm_remove_all"),
-         InlineKeyboardButton("لغو", callback_data="cancel_remove_all")]
+        [InlineKeyboardButton("تایید", callback_data="confirm_remove_all")],
+        [InlineKeyboardButton("لغو", callback_data="cancel_remove_all")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("آیا مطمئن هستید که می‌خواهید تمامی ادمین‌ها حذف شوند؟", reply_markup=reply_markup)
+    await query.edit_message_text("آیا مطمئن هستید که می‌خواهید تمامی ادمین‌ها حذف شوند؟", reply_markup=reply_markup)
 
-async def confirm_remove_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def confirm_remove_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     conn = get_db_connection()
@@ -218,14 +250,78 @@ async def confirm_remove_all(update: Update, context: ContextTypes.DEFAULT_TYPE)
     conn.close()
     await query.edit_message_text("تمامی ادمین‌ها حذف شدند.")
 
-async def cancel_remove_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cancel_remove_all_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("عملیات حذف تمامی ادمین‌ها لغو شد.")
 
+# ----- ویرایش کاتالوگ -----
+# وقتی کاربر روی دکمه "ویرایش کاتالوگ" کلیک می‌کند، دکمه‌های مربوط به ستون‌ها نمایش داده می‌شود
+async def admin_edit_catalog_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("UV", callback_data="catalog_edit_uv")],
+        [InlineKeyboardButton("FIBER", callback_data="catalog_edit_fiber")],
+        [InlineKeyboardButton("DIOD", callback_data="catalog_edit_diod")],
+        [InlineKeyboardButton("MOPA", callback_data="catalog_edit_mopa")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("لطفاً کاتالوگ مورد نظر را برای ویرایش انتخاب کنید:", reply_markup=reply_markup)
+
+# وقتی یکی از دکمه‌های کاتالوگ انتخاب شود
+async def catalog_edit_choice_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    # استخراج ستون انتخاب‌شده؛ مثلاً از "catalog_edit_mopa" قسمت آخر (mopa) را می‌گیریم
+    selected = query.data.split("_")[-1]  # uv, fiber, diod, یا mopa
+    context.user_data["selected_catalog_column"] = selected
+    await query.edit_message_text(f"شما {selected} را انتخاب کردید. لطفاً فایل جدید را ارسال کنید:")
+    # وارد حالت دریافت فایل می‌شویم
+    return STATE_WAIT_FOR_CATALOG_FILE
+
+# پیام handler برای دریافت فایل کاتالوگ
+async def catalog_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.document:
+        file_id = update.message.document.file_id
+        file = await update.message.bot.get_file(file_id)
+        file_data = await file.download_as_bytearray()
+        selected_column = context.user_data.get("selected_catalog_column")
+        if not selected_column:
+            await update.message.reply_text("خطایی رخ داد. لطفاً دوباره امتحان کنید.")
+            return ConversationHandler.END
+        tables_updated = []
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # بررسی تمام جدول‌ها؛ اگر جدول مورد نظر ستون انتخاب‌شده را داشته باشد، فایل جدید را جایگزین می‌کنیم
+        for table, columns in TABLE_COLUMNS.items():
+            if selected_column in columns:
+                sql = f"""
+                    UPDATE {table} 
+                    SET {selected_column} = ? 
+                    WHERE id = (SELECT id FROM {table} ORDER BY id DESC LIMIT 1)
+                """
+                cur.execute(sql, (file_data,))
+                conn.commit()
+                tables_updated.append(table)
+        conn.close()
+        await update.message.reply_text(
+            f"کاتالوگ {selected_column} در جداول {', '.join(tables_updated)} به‌روزرسانی شد."
+        )
+    else:
+        await update.message.reply_text("لطفاً یک فایل معتبر ارسال کنید.")
+    return ConversationHandler.END
+
+async def cancel_catalog_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("ویرایش کاتالوگ لغو شد.")
+    return ConversationHandler.END
+
+# =====================
+# main() و ثبت Handlerها
+# =====================
 def main():
+    create_admins_table()
     app = Application.builder().token(TOKEN).build()
-    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(start_business_callback, pattern="^start_business$"))
     app.add_handler(CallbackQueryHandler(back_to_start, pattern="^back_to_start$"))
@@ -233,30 +329,50 @@ def main():
     app.add_handler(CallbackQueryHandler(table_callback, pattern="^table_"))
     app.add_handler(CallbackQueryHandler(column_callback, pattern="^column_"))
     app.add_handler(CommandHandler("support" , support))
-
-
- # 1. افزودن ادمین (رمز اول)
-    admin_conv_handler = ConversationHandler(
+    # ثبت Handler مربوط به افزودن ادمین
+    add_admin_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.Text(PASSWORD_ADD), add_admin_start)],
         states={
-            ADD_ADMIN_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
+            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
         },
         fallbacks=[CommandHandler("cancel", cancel_admin_addition)]
     )
-    app.add_handler(admin_conv_handler)
-    
-    # 2. حذف یک ادمین (رمز دوم)
-    app.add_handler(MessageHandler(filters.Text(PASSWORD_REMOVE_SINGLE), remove_admin_list))
-    app.add_handler(CallbackQueryHandler(remove_admin_callback, pattern=r"^remove_admin_\d+$"))
-    
-    # 3. حذف تمامی ادمین‌ها (رمز سوم)
-    app.add_handler(MessageHandler(filters.Text(PASSWORD_REMOVE_ALL), remove_all_admins_start))
-    app.add_handler(CallbackQueryHandler(confirm_remove_all, pattern="^confirm_remove_all$"))
-    app.add_handler(CallbackQueryHandler(cancel_remove_all, pattern="^cancel_remove_all$"))
-    
+    app.add_handler(add_admin_conv_handler)
 
-    print("The Robot Is Running!!")
-    app.post_init = set_bot_commands
+    # Handler برای دریافت رمز ادمین اصلی
+    app.add_handler(MessageHandler(filters.Text(MAIN_ADMIN_PASS), main_admin_menu))
+
+    # CallbackQueryHandlers برای منوی ادمین اصلی
+    app.add_handler(CallbackQueryHandler(admin_remove_single_callback, pattern="^admin_remove_single$"))
+    app.add_handler(CallbackQueryHandler(admin_remove_all_callback, pattern="^admin_remove_all$"))
+    app.add_handler(CallbackQueryHandler(confirm_remove_all_callback, pattern="^confirm_remove_all$"))
+    app.add_handler(CallbackQueryHandler(cancel_remove_all_callback, pattern="^cancel_remove_all$"))
+    app.add_handler(CallbackQueryHandler(admin_edit_catalog_callback, pattern="^admin_edit_catalog$"))
+    app.add_handler(CallbackQueryHandler(catalog_edit_choice_callback, pattern="^catalog_edit_"))
+    app.add_handler(CallbackQueryHandler(remove_admin_callback, pattern=r"^remove_admin_\d+$"))
+
+    # ConversationHandler برای دریافت فایل ویرایش کاتالوگ
+    catalog_edit_conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Document.ALL, catalog_file_handler)],
+        states={
+            STATE_WAIT_FOR_CATALOG_FILE: [MessageHandler(filters.Document.ALL, catalog_file_handler)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_catalog_edit)]
+    )
+    app.add_handler(catalog_edit_conv_handler)
+
+    # (سایر handlerهای مربوط به کاتالوگ، انتخاب حوزه و ارسال فایل برای کاربران نیز همانند قبل اضافه شوند)
+
+    # ثبت دستورات ربات (اختیاری)
+    async def set_commands(app: Application):
+        commands = [
+            BotCommand("start", "خانه"),
+            BotCommand("support", "ارتباط با پشتیبانی")
+        ]
+        await app.bot.set_my_commands(commands)
+    app.post_init = set_commands
+
+    print("ربات در حال اجرا است...")
     app.run_polling()
 
 if __name__ == '__main__':
