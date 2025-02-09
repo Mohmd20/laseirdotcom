@@ -146,7 +146,6 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("ارتباط با پشتیبانی", url=f"tg://user?id={ADMIN_ID}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
-
     else:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -213,6 +212,8 @@ async def admin_remove_single_callback(update: Update, context: ContextTypes.DEF
     for admin in admins:
         user_id, name = admin
         keyboard.append([InlineKeyboardButton(f"{name} ({user_id})", callback_data=f"remove_admin_{user_id}")])
+    # اضافه کردن دکمه بازگشت
+    keyboard.append([InlineKeyboardButton("بازگشت", callback_data="main_admin_back")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("لطفاً یک ادمین را برای حذف انتخاب کنید:", reply_markup=reply_markup)
 
@@ -235,7 +236,7 @@ async def admin_remove_all_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     keyboard = [
         [InlineKeyboardButton("تایید", callback_data="confirm_remove_all")],
-        [InlineKeyboardButton("لغو", callback_data="cancel_remove_all")]
+        [InlineKeyboardButton("بازگشت", callback_data="main_admin_back")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("آیا مطمئن هستید که می‌خواهید تمامی ادمین‌ها حذف شوند؟", reply_markup=reply_markup)
@@ -284,7 +285,7 @@ async def catalog_edit_choice_callback(update: Update, context: ContextTypes.DEF
 async def catalog_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.document:
         file_id = update.message.document.file_id
-        file = await context.bot.get_file(file_id)
+        file = await context.bot.get_file(file_id)  # تغییر از update.message.bot به context.bot
         file_data = await file.download_as_bytearray()
         selected_column = context.user_data.get("selected_catalog_column")
         if not selected_column:
@@ -293,7 +294,7 @@ async def catalog_file_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         tables_updated = []
         conn = get_db_connection()
         cur = conn.cursor()
-        # بررسی تمام جدول‌ها؛ اگر جدول مورد نظر ستون انتخاب‌شده را داشته باشد، فایل جدید را جایگزین می‌کنیم
+        # به‌روزرسانی تمام جدول‌هایی که ستون انتخاب‌شده را دارند
         for table, columns in TABLE_COLUMNS.items():
             if selected_column in columns:
                 sql = f"""
@@ -305,8 +306,11 @@ async def catalog_file_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 conn.commit()
                 tables_updated.append(table)
         conn.close()
+        keyboard = [[InlineKeyboardButton("بازگشت", callback_data="main_admin_back")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            f"کاتالوگ {selected_column} در جداول {', '.join(tables_updated)} به‌روزرسانی شد."
+            f"کاتالوگ {selected_column} در جداول {', '.join(tables_updated)} به‌روزرسانی شد.",
+            reply_markup=reply_markup
         )
     else:
         await update.message.reply_text("لطفاً یک فایل معتبر ارسال کنید.")
@@ -315,6 +319,16 @@ async def catalog_file_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def cancel_catalog_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("ویرایش کاتالوگ لغو شد.")
     return ConversationHandler.END
+async def main_admin_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("حذف تکی ادمین ها", callback_data="admin_remove_single")],
+        [InlineKeyboardButton("حذف همه ادمین ها", callback_data="admin_remove_all")],
+        [InlineKeyboardButton("ویرایش کاتالوگ", callback_data="admin_edit_catalog")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("منوی ادمین اصلی:", reply_markup=reply_markup)
 
 # =====================
 # main() و ثبت Handlerها
@@ -350,6 +364,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_edit_catalog_callback, pattern="^admin_edit_catalog$"))
     app.add_handler(CallbackQueryHandler(catalog_edit_choice_callback, pattern="^catalog_edit_"))
     app.add_handler(CallbackQueryHandler(remove_admin_callback, pattern=r"^remove_admin_\d+$"))
+    app.add_handler(CallbackQueryHandler(main_admin_back_callback, pattern="^main_admin_back$"))
 
     # ConversationHandler برای دریافت فایل ویرایش کاتالوگ
     catalog_edit_conv_handler = ConversationHandler(
