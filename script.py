@@ -18,10 +18,6 @@ MAIN_ADMIN_PASS = "321"     # رمز عملیات ادمین اصلی
 # حالت مکالمه برای دریافت فایل در ویرایش کاتالوگ
 STATE_WAIT_FOR_CATALOG_FILE = 1
 
-# حالت مکالمه برای تغییر رمز
-STATE_CHANGE_PASSWORD = 1
-STATE_CHANGE_MAIN_PASSWORD = 1
-
 # دیکشنری‌های مربوط به کاتالوگ (ساختار قبلی)
 TABLE_LABELS = {
     "gold": "حکاکی رنگی طلا",
@@ -70,50 +66,7 @@ def create_admins_table():
 
 
 
-def create_config_table():
-    conn = sqlite3.connect("bot_database.db")
-    cur = conn.cursor()
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS config (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    ''')
-    # درج مقدار پیش‌فرض برای هر دو رمز در صورت عدم وجود
-    cur.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", ("admin_add_password", "addadmin123"))
-    cur.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", ("main_admin_password", "mainadmin456"))
-    conn.commit()
-    conn.close()
 
-def get_admin_add_password():
-    conn = sqlite3.connect("bot_database.db")
-    cur = conn.cursor()
-    cur.execute("SELECT value FROM config WHERE key = ?", ("admin_add_password",))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else "addadmin123"
-
-def set_admin_add_password(new_password: str):
-    conn = sqlite3.connect("bot_database.db")
-    cur = conn.cursor()
-    cur.execute("UPDATE config SET value = ? WHERE key = ?", (new_password, "admin_add_password"))
-    conn.commit()
-    conn.close()
-
-def get_main_admin_password():
-    conn = sqlite3.connect("bot_database.db")
-    cur = conn.cursor()
-    cur.execute("SELECT value FROM config WHERE key = ?", ("main_admin_password",))
-    row = cur.fetchone()
-    conn.close()
-    return row[0] if row else "mainadmin456"
-
-def set_main_admin_password(new_password: str):
-    conn = sqlite3.connect("bot_database.db")
-    cur = conn.cursor()
-    cur.execute("UPDATE config SET value = ? WHERE key = ?", (new_password, "main_admin_password"))
-    conn.commit()
-    conn.close()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -211,47 +164,10 @@ async def back_to_tables(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================
 # بخش افزودن ادمین (با رمز PASSWORD_ADD)
 # =====================
-async def admin_add_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    if text == get_admin_add_password():
-        return await add_admin_start(update, context)
-    else:
-        # در صورتی که رمز وارد شده صحیح نباشد، می‌توانید پیام خطا ارسال کنید یا عملیات را لغو نمایید.
-        return ConversationHandler.END
-async def admin_change_password_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("لطفاً رمز جدید را ارسال کنید:")
-    return STATE_CHANGE_PASSWORD
-
-async def admin_change_password_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_password = update.message.text.strip()
-    set_admin_add_password(new_password)  # به‌روزرسانی رمز در پایگاه داده
-    await update.message.reply_text(f"رمز برای افزودن ادمین به '{new_password}' تغییر یافت.")
-    return ConversationHandler.END
-
-async def admin_change_password_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("تغییر رمز لغو شد.")
-    return ConversationHandler.END
 async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("لطفاً نام خود را وارد کنید:")
     return 1
 
-async def admin_change_main_password_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("لطفاً رمز جدید برای دسترسی ادمین اصلی را ارسال کنید:")
-    return STATE_CHANGE_MAIN_PASSWORD
-
-async def admin_change_main_password_receive(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    new_password = update.message.text.strip()
-    set_main_admin_password(new_password)  # ذخیره رمز جدید در پایگاه داده
-    await update.message.reply_text(f"رمز ادمین اصلی به '{new_password}' تغییر یافت.")
-    return ConversationHandler.END
-
-async def admin_change_main_password_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("تغییر رمز اصلی لغو شد.")
-    return ConversationHandler.END
 async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_name = update.message.text.strip()
     user_id = update.effective_user.id
@@ -276,8 +192,6 @@ async def main_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("حذف تکی ادمین ها", callback_data="admin_remove_single")],
         [InlineKeyboardButton("حذف همه ادمین ها", callback_data="admin_remove_all")],
         [InlineKeyboardButton("ویرایش کاتالوگ", callback_data="admin_edit_catalog")]
-        [InlineKeyboardButton("تغییر رمز افزودن", callback_data="admin_change_password")],
-        [InlineKeyboardButton("تغییر رمز اصلی", callback_data="admin_change_main_password")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("منوی ادمین اصلی:", reply_markup=reply_markup)
@@ -420,7 +334,6 @@ async def main_admin_back_callback(update: Update, context: ContextTypes.DEFAULT
 # main() و ثبت Handlerها
 # =====================
 def main():
-    create_config_table()
     create_admins_table()
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -432,7 +345,7 @@ def main():
     app.add_handler(CommandHandler("support" , support))
     # ثبت Handler مربوط به افزودن ادمین
     add_admin_conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text(), admin_add_entry)],
+        entry_points=[MessageHandler(filters.Text(PASSWORD_ADD), add_admin_start)],
         states={
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
         },
@@ -440,28 +353,8 @@ def main():
     )
     app.add_handler(add_admin_conv_handler)
 
-    # Handler دریافت رمز ادمین اصلی برای ورود به منوی ادمین
-    app.add_handler(MessageHandler(filters.Text(get_main_admin_password()), main_admin_menu))
-
-    admin_change_password_conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(admin_change_password_start, pattern="^admin_change_password$")],
-    states={
-        STATE_CHANGE_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_change_password_receive)]
-    },
-    fallbacks=[CommandHandler("cancel", admin_change_password_cancel)]
-    )
-    app.add_handler(admin_change_password_conv_handler)
-
-        # Handler تغییر رمز اصلی
-    admin_change_main_password_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_change_main_password_start, pattern="^admin_change_main_password$")],
-        states={
-            STATE_CHANGE_MAIN_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_change_main_password_receive)]
-        },
-        fallbacks=[CommandHandler("cancel", admin_change_main_password_cancel)]
-    )
-    app.add_handler(admin_change_main_password_conv_handler)
-    
+    # Handler برای دریافت رمز ادمین اصلی
+    app.add_handler(MessageHandler(filters.Text(MAIN_ADMIN_PASS), main_admin_menu))
 
     # CallbackQueryHandlers برای منوی ادمین اصلی
     app.add_handler(CallbackQueryHandler(admin_remove_single_callback, pattern="^admin_remove_single$"))
