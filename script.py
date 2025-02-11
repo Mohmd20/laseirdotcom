@@ -91,8 +91,23 @@ async def table_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("بازگشت", callback_data="back_to_tables")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(f"شما {TABLE_LABELS.get(table_key, table_key)} را انتخاب کردید.\nهر کدام را خواستید انتخاب کنید تا کاتالوگش را براتون ارسال کنم", reply_markup=reply_markup)
-async def support (update:Update , context:ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("برای ارتباط با ما روی   id زیر کلیک کنید :(https://t.me/misterwebdeveloper)" , parse_mode="Markdown")
+
+
+
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, name FROM admins")
+    admins = cur.fetchall()
+    conn.close()
+    keyboard = []
+    if admins:
+        for admin in admins:
+            admin_id, admin_name = admin
+            keyboard.append([InlineKeyboardButton(f"ارتباط با {admin_name}", url=f"tg://user?id={admin_id}")]) 
+        reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("برای ارتباط با ما با یکی از پشتیبان ها در ارتباط باشید", reply_markup=reply_markup)
+
 async def set_bot_commands(application: Application):
     commands = [
         BotCommand("start" , "خانه"),
@@ -100,7 +115,6 @@ async def set_bot_commands(application: Application):
     ]
     await application.bot.set_my_commands(commands)
 async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ADMIN_ID = 235828041
     query = update.callback_query
     await query.answer()
     column_key = query.data.split("_", 1)[1]
@@ -121,31 +135,49 @@ async def column_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_data = result[0]
         bio = BytesIO(file_data)
         bio.name = f"{column_key}.pdf"
+        # ارسال فایل به کاربر
         await query.message.reply_document(document=bio)
-        user_id = update.effective_user.id
+        
+        # ارسال پیام به تمامی ادمین‌ها
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT user_id, name FROM admins")
+        admins = cur.fetchall()
+        conn.close()
 
-# متن پیام برای ادمین (می‌توانید همچنان آی‌دی را به صورت متن بگنجانید)
-        admin_message = (
-        f"کاربری از ربات فایل '{COLUMN_LABELS.get(column_key, column_key)}' "
-        f"را از حوزه '{TABLE_LABELS.get(table_key, table_key)}' دریافت کرد."
-        )
+        if admins:
+            for admin in admins:
+                admin_user_id, admin_name = admin
+                # ایجاد لینک برای دسترسی به پیوی کاربر
+                user_id = update.effective_user.id
+                user_link = f"<a href=\"tg://user?id={user_id}\">id کاربر</a>"
+                # اطلاعات خرید برای ادمین
+                admin_message = (
+                    f"کاربری از ربات فایل '{COLUMN_LABELS.get(column_key, column_key)}' "
+                    f"را از حوزه '{TABLE_LABELS.get(table_key, table_key)}' دریافت کرد."
+                )
+                # ارسال پیام به ادمین
+                # await context.bot.send_message(chat_id=admin_user_id, text=admin_message, parse_mode="HTML")
+                # ارسال دکمه چت با کاربر
+                keyboard = [
+                    [InlineKeyboardButton("چت با کاربر", url=f"tg://user?id={user_id}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await context.bot.send_message(
+                    chat_id=admin_user_id,
+                    text=f"{admin_message}",
+                    reply_markup=reply_markup,
+                    parse_mode="HTML"
+                )
 
-# ایجاد یک دکمه اینلاین با URL مناسب
-        keyboard = [
-        [InlineKeyboardButton("چت با کاربر", url=f"tg://user?id={user_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=admin_message,
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
+        # ارسال پیامی به کاربر
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
-        keyboard.append([InlineKeyboardButton("ارتباط با پشتیبانی", url=f"tg://user?id={ADMIN_ID}")])
+        if admins:
+            for admin in admins:
+                admin_id, admin_name = admin
+                keyboard.append([InlineKeyboardButton(f"ارتباط با {admin_name}", url=f"tg://user?id={admin_id}")]) 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(f"کاتالوگ {COLUMN_LABELS.get(column_key)} ارسال شد. اون رو مطالعه کنید و در صورت نیاز با پشتیبانی در ارتباط باشید", reply_markup=reply_markup)
+        await query.edit_message_text("فایل برای شما ارسال شد.", reply_markup=reply_markup)
     else:
         keyboard = [[InlineKeyboardButton("بازگشت", callback_data="back_to_tables")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -170,6 +202,8 @@ async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     admin_name = update.message.text.strip()
+    if admin_name == "❌ لغو":
+        return await cancel_admin_addition_callback(update, context)
     user_id = update.effective_user.id
     conn = get_db_connection()
     cur = conn.cursor()
@@ -179,8 +213,10 @@ async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"ادمین با نام {admin_name} اضافه شد.")
     return ConversationHandler.END
 
-async def cancel_admin_addition(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("عملیات افزودن ادمین لغو شد.")
+async def cancel_admin_addition_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("عملیات افزودن ادمین لغو شد.")
     return ConversationHandler.END
 
 # =====================
@@ -265,7 +301,8 @@ async def admin_edit_catalog_callback(update: Update, context: ContextTypes.DEFA
         [InlineKeyboardButton("UV", callback_data="catalog_edit_uv")],
         [InlineKeyboardButton("FIBER", callback_data="catalog_edit_fiber")],
         [InlineKeyboardButton("DIOD", callback_data="catalog_edit_diod")],
-        [InlineKeyboardButton("MOPA", callback_data="catalog_edit_mopa")]
+        [InlineKeyboardButton("MOPA", callback_data="catalog_edit_mopa")],
+        [InlineKeyboardButton("بازگشت", callback_data="main_admin_back")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("لطفاً کاتالوگ مورد نظر را برای ویرایش انتخاب کنید:", reply_markup=reply_markup)
@@ -349,7 +386,7 @@ def main():
         states={
             1: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
         },
-        fallbacks=[CommandHandler("cancel", cancel_admin_addition)]
+        fallbacks=[CommandHandler("cancel",  cancel_admin_addition_callback)]
     )
     app.add_handler(add_admin_conv_handler)
 
@@ -365,6 +402,7 @@ def main():
     app.add_handler(CallbackQueryHandler(catalog_edit_choice_callback, pattern="^catalog_edit_"))
     app.add_handler(CallbackQueryHandler(remove_admin_callback, pattern=r"^remove_admin_\d+$"))
     app.add_handler(CallbackQueryHandler(main_admin_back_callback, pattern="^main_admin_back$"))
+    app.add_handler(CallbackQueryHandler(cancel_admin_addition_callback, pattern="^cancel_admin_addition$"))
 
     # ConversationHandler برای دریافت فایل ویرایش کاتالوگ
     catalog_edit_conv_handler = ConversationHandler(
