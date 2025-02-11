@@ -197,13 +197,16 @@ async def back_to_tables(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # بخش افزودن ادمین (با رمز PASSWORD_ADD)
 # =====================
 async def add_admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("لطفاً نام خود را وارد کنید:")
+    keyboard = [
+        [InlineKeyboardButton("لغو ❌", callback_data="cancel_admin_addition")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("لطفاً نام خود را وارد کنید:" , reply_markup=reply_markup)
     return 1
 
 async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ایجاد کیبورد اینلاین با دکمه لغو
     admin_name = update.message.text.strip()
-    if admin_name == "❌ لغو":
-        return await cancel_admin_addition_callback(update, context)
     user_id = update.effective_user.id
     conn = get_db_connection()
     cur = conn.cursor()
@@ -216,7 +219,7 @@ async def add_admin_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel_admin_addition_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("عملیات افزودن ادمین لغو شد.")
+    await query.edit_message_text("فرآیند افزودن ادمین لغو شد ❌")
     return ConversationHandler.END
 
 # =====================
@@ -314,7 +317,9 @@ async def catalog_edit_choice_callback(update: Update, context: ContextTypes.DEF
     # استخراج ستون انتخاب‌شده؛ مثلاً از "catalog_edit_mopa" قسمت آخر (mopa) را می‌گیریم
     selected = query.data.split("_")[-1]  # uv, fiber, diod, یا mopa
     context.user_data["selected_catalog_column"] = selected
-    await query.edit_message_text(f"شما {selected} را انتخاب کردید. لطفاً فایل جدید را ارسال کنید:")
+    keyboard = [[InlineKeyboardButton("بازگشت", callback_data="main_admin_back")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(f"شما {selected} را انتخاب کردید. لطفاً فایل جدید را ارسال کنید:",reply_markup=reply_markup)
     # وارد حالت دریافت فایل می‌شویم
     return STATE_WAIT_FOR_CATALOG_FILE
 
@@ -382,11 +387,12 @@ def main():
     app.add_handler(CommandHandler("support" , support))
     # ثبت Handler مربوط به افزودن ادمین
     add_admin_conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text(PASSWORD_ADD), add_admin_start)],
-        states={
-            1: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name)]
-        },
-        fallbacks=[CommandHandler("cancel",  cancel_admin_addition_callback)]
+    entry_points=[MessageHandler(filters.Text(PASSWORD_ADD), add_admin_start)],
+    states={
+        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_admin_name),
+            CallbackQueryHandler(cancel_admin_addition_callback, pattern="^cancel_admin_addition$")]
+    },
+    fallbacks=[CommandHandler("cancel", cancel_admin_addition_callback)]
     )
     app.add_handler(add_admin_conv_handler)
 
